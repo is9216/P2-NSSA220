@@ -1,0 +1,131 @@
+#!/bin/python
+
+import re
+from filter_packets import filter
+
+#splits the file
+def split_packets(text):
+    packets = re.split(r"(?=^\s*No\.\s+Time)", text, flags=re.MULTILINE)
+
+    packet_list = []
+
+    for packet in packets:
+        if packet.strip() != "":
+            packet_list.append(packet.strip())
+
+    return packet_list
+
+
+def parse(filename):
+
+    file = open(filename, "r")
+    text = file.read()
+    file.close()
+
+    #split packets and filter
+    packets = split_packets(text)
+    filtered_packets = filter(packets)
+
+    parsed_packets = []
+
+    #go through packets
+    for packet in filtered_packets:
+
+        lines = packet.splitlines()
+
+        if len(lines) == 0:
+            continue
+        #first line contains the packet summary
+
+        packet_line = None
+
+        for line in lines:
+
+            split_line = line.split()
+
+            if len(split_line) == 0:
+                continue
+            try:
+                int(split_line[0])
+                packet_line = line
+                break
+            except ValueError:
+                pass
+        if packet_line is None:
+            continue
+
+        parts = packet_line.split()
+        if len(parts) < 7:
+            continue
+        #packet information
+        number = int(parts[0])
+        time = float(parts[1])
+        source = parts[2]
+        destination = parts[3]
+        protocol = parts[4]
+        length = int(parts[5])
+
+        info = ""
+
+        for item in parts[6:]:
+            info += item + " "
+
+        info = info.strip()
+
+        if "Echo (ping) request" in info:
+            packet_type = "request"
+
+        elif "Echo (ping) reply" in info:
+            packet_type = "reply"
+
+        else:
+            packet_type = "other"
+
+        seq_search = re.search(r"seq=(\d+)", info)
+
+        if seq_search:
+            sequence = int(seq_search.group(1))
+        else:
+            sequence = None
+        #search for ttl
+        ttl_search = re.search(r"ttl=(\d+)", info)
+
+        if ttl_search:
+            ttl = int(ttl_search.group(1))
+        else:
+            ttl = None
+
+        payload_size = length - 42
+#stores the data in a dictionary
+        packet_data = {
+            "num": number,
+            "time": time,
+            "src": source,
+            "dst": destination,
+            "proto": protocol,
+            "length": length,
+            "payload_bytes": payload_size,
+            "type": packet_type,
+            "seq": sequence,
+            "ttl": ttl,
+            "info": info
+        }
+
+        parsed_packets.append(packet_data)
+
+    return parsed_packets
+
+
+def main():
+
+    #parse the file
+    packets = parse("Node1_filtered.txt")
+
+    print("Parsed", len(packets), "packets")
+
+    if len(packets) > 0:
+        print(packets[0])
+
+
+if __name__ == "__main__":
+    main()
